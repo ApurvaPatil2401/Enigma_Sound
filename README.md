@@ -19,14 +19,18 @@ It utilizes AI models to analyze text, voice, and facial expressions to detect e
 
 1. Clone the repository:
 
-- git clone https://github.com/yourusername/enigma-sound.git
-
+- git clone https://github.com/ApurvaPatil2401/Enigma_Sound.git
 - cd enigma-sound
 
 
 2. Install backend dependencies:
 
+- cd enigmasoundbackend
 - pip install -r requirements.txt
+
+  **Note: Due to file size limits on GitHub, you must download the SoundFont manually: 
+  Place the .sf2 file in: enigmasoundbackend/soundfonts/
+  🔗 https://drive.google.com/drive/folders/1Afpft75F2IBZz-L-B_y5zrsaZIPeEBV0?usp=drive_link
 
 
 3. Run the backend server:
@@ -36,7 +40,7 @@ It utilizes AI models to analyze text, voice, and facial expressions to detect e
 
 4. Navigate to the Flutter frontend and install dependencies:
 
-- cd frontend  
+- cd emotion 
 
 - flutter pub get  
 
@@ -46,6 +50,7 @@ It utilizes AI models to analyze text, voice, and facial expressions to detect e
 - flutter run
 
 
+
 # Low-Resource Edge Device Demo : 
 
 https://github.com/user-attachments/assets/03a5bae2-eeaf-41f7-864d-bca3daa6ca39
@@ -53,6 +58,7 @@ https://github.com/user-attachments/assets/03a5bae2-eeaf-41f7-864d-bca3daa6ca39
 
 
 **Technical Note on Demo: > "This demo was captured during a live test on a mid-range mobile device to demonstrate the model's efficiency on Edge Devices without cloud-side GPU acceleration. The focus is on real-time emotional mapping logic  rather than high-fidelity recording."
+
 
 
 
