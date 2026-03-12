@@ -1,0 +1,44 @@
+# --- Flutter specific ---
+# Local property files used by the Android and iOS toolchains
+**/android/local.properties
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+
+# Flutter specific lock files (Users should run 'flutter pub get' themselves)
+pubspec.lock
+
+# --- Python / IDE specific ---
+# The project file for IntelliJ/PyCharm
+*.iml
+.idea/
+
+# Local cache for the model (I see .cache in your backend folder)
+enigmasoundbackend/.cache/
+
+# Generated audio files (Don't push these, the code creates them!)
+enigmasoundbackend/generated_music/*.mp3
+enigmasoundbackend/generated_music/*.wav
+enigmasoundbackend/music/*.mp3
+.vscode/
+
+# Ignore large soundfont files
+enigmasoundbackend/soundfonts/
+
+# Ignore Python caches
+__pycache__/
+*.pyc
+
+# Ignore Flutter/Dart build files
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Ignore OS files
+Thumbs.db
+.DS_Store
+
+.cache/
+generated_music/
+music/
+static/
