@@ -10,6 +10,6 @@ librosa==0.10.2.post1
 soundfile==0.12.1
 music21==9.3.0
 requests==2.32.3
-gunicorn==23.0.0  
+gunicorn==23.0.0   
 scipy==1.14.1
-huggingface_hub
+huggingface_hub 
