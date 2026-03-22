@@ -1,16 +1,11 @@
 # emotion
+Enigma Sound - Frontend (Flutter)
+This is the mobile interface for Enigma Sound, designed to provide a seamless, multi-modal user experience for emotion-driven music generation.
 
-A new Flutter project.
+✨ Key Features:
+1. Multi-Modal Input: UI for capturing facial expressions, voice samples, and text input.
 
-## Getting Started
+2. Real-time Detection: Displays detected emotional states (Happy, Sad, Neutral, etc.) via Flask API integration.
 
-This project is a starting point for a Flutter application.
+3. Music Player: Integrated interface for AI-generated music playback and Spotify redirection.
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
