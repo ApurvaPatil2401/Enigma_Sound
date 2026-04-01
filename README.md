@@ -9,9 +9,9 @@ The Enigma Sound App aimed to provide a seamless and intuitive music experience 
 It utilizes AI models to analyze text, voice, and facial expressions to detect emotions and generate melodies using  Music21 and FluidSynth or recommend Spotify songs.
 
 # Tech Stack
--> Frontend: Flutter  
-
 -> Backend: Python (Flask,Music21,FluidSynth)
+
+-> Frontend: Flutter  
 
 -> AI & Machine Learning: TensorFlow, Librosa, CNN-LSTM model for audio, FER model for face detection
 
