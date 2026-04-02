@@ -9,7 +9,6 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from transformers import pipeline
 import torch
-#from torch import nncd
 import torch.nn as nn
 import torch.nn.functional as F
 from music21 import stream, note, midi, chord ,tempo , instrument
