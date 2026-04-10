@@ -1,7 +1,7 @@
 # --- Flutter specific ---
 # Local property files used by the Android and iOS toolchains
 **/android/local.properties
-**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/Generated.xcconfig 
 **/ios/Flutter/flutter_export_environment.sh
 
 # Flutter specific lock files (Users should run 'flutter pub get' themselves)
