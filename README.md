@@ -33,6 +33,12 @@ It utilizes AI models to analyze text, voice, and facial expressions to detect e
 
   🔗 https://drive.google.com/drive/folders/1Afpft75F2IBZz-L-B_y5zrsaZIPeEBV0?usp=drive_link
 
+**FluidSynth Configuration:**
+Download FluidSynth from: https://drive.google.com/file/d/1c3vnRnS1JOv3cXpBEy_QWWFO5y29JJw1/view?usp=drive_link
+After downloading, update line 17 in `enigmasoundbackend/app.py`:
+```python
+FLUIDSYNTH_PATH = "your/path/to/fluidsynth/bin/fluidsynth"
+```
 
 3. Run the backend server:
 
@@ -50,7 +56,11 @@ It utilizes AI models to analyze text, voice, and facial expressions to detect e
 
 - flutter run
 
-
+**Frontend Configuration:**
+Update your backend IP in `emotion/lib/config.dart`:
+```dart
+static const String baseUrl = 'http://YOUR_IP:5000';
+```
 
 # Low-Resource Edge Device Demo : 
 
