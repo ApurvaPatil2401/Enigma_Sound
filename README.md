@@ -35,7 +35,7 @@ It utilizes AI models to analyze text, voice, and facial expressions to detect e
 
 **FluidSynth Configuration:**
 Download FluidSynth from: https://drive.google.com/file/d/1c3vnRnS1JOv3cXpBEy_QWWFO5y29JJw1/view?usp=drive_link
-After downloading, update line 17 in `enigmasoundbackend/app.py`:
+After downloading, update line 24 in `enigmasoundbackend/app.py`:
 ```python
 FLUIDSYNTH_PATH = "your/path/to/fluidsynth/bin/fluidsynth"
 ```
