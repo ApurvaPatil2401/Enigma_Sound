@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'config.dart';
 import 'music_player_screen.dart';
 
 class TextInputScreen extends StatefulWidget {
@@ -28,7 +29,7 @@ class _TextInputScreenState extends State<TextInputScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.1.11:5000/detect-emotion-text'),
+        Uri.parse('${AppConfig.baseUrl}/detect-emotion-text'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'text': _controller.text}),
       );

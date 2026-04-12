@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'config.dart';
 import 'music_player_screen.dart';
 
 class AudioInputScreen extends StatefulWidget {
@@ -91,7 +92,7 @@ class _AudioInputScreenState extends State<AudioInputScreen> {
     try {
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('http://192.168.1.11:5000/detect-emotion-audio'),
+        Uri.parse('${AppConfig.baseUrl}/detect-emotion-face'),
       );
       request.files.add(await http.MultipartFile.fromPath('audio', _filePath!));
 

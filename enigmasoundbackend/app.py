@@ -19,6 +19,9 @@ app = Flask(__name__)
 CORS(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Download FluidSynth from: [Google Drive link mention in readme]
+# Update this path to match your local installation
+FLUIDSYNTH_PATH = "D:/Aaa/fluidsynth-2.4.3/bin/fluidsynth"
 
 # Initialize logging
 logging.basicConfig(level=logging.DEBUG)
@@ -396,8 +399,9 @@ def generate_music(detected_emotion):
 
         # Convert MIDI to MP3
         mp3_path = f"static/{detected_emotion}_{random_number}.mp3"
-        fluidsynth_exe = os.path.join(BASE_DIR, 'fluidsynth', 'bin', 'fluidsynth.exe')
-        subprocess.run([fluidsynth_exe, "-ni", "soundfonts/FluidR3_GM.sf2", midi_path, "-F", mp3_path, "-r", "44100"])
+        subprocess.run([FLUIDSYNTH_PATH, "-ni",
+                        os.path.join(BASE_DIR, "soundfonts/FluidR3_GM.sf2"),
+                        midi_path, "-F", mp3_path, "-r", "44100"])
 
         if os.path.exists(mp3_path):
             logging.info(f"Generated MP3 Path: {mp3_path}")
