@@ -15,6 +15,13 @@ It utilizes AI models to analyze text, voice, and facial expressions to detect e
 
 -> AI & Machine Learning: TensorFlow, Librosa, CNN-LSTM model for audio, FER model for face detection
 
+# 🌐 Community & Research Recognition
+
+This project is actively discussed within the global AI developer ecosystem and is featured on the **Google AI Developers Forum**. 
+* **Official Discussion Thread:** [https://discuss.ai.google.dev/t/enigma-sound-multi-modal-emotion-to-music-pipeline-fusing-face-voice-and-text-ieee-research/137178]
+
+---
+
 # 🛠 Setup & Installation
 
 1. Clone the repository:
