@@ -4,7 +4,7 @@ Thank you for your interest in the Enigma Sound research project! I am currently
 As the primary maintainer, I welcome collaborators who are passionate about the intersection of AI, emotion, and music.
 
 ### 🛠 How You Can Help:
--Vertex AI Migration: I am looking to refactor custom LSTM layers to Google Vertex AI.
+-Vertex AI Migration: I am looking to refactor custom LSTM layers to Google Vertex AI. 
 
 -Gemini Embeddings: I plan to implement Google Gemini’s multimodal embeddings for deeper emotional nuance and need help testing the integration.
 
