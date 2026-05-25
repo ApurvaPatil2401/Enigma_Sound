@@ -14,6 +14,9 @@ import torch.nn.functional as F
 from music21 import stream, note, midi, chord ,tempo , instrument
 import logging
 
+from dotenv import load_dotenv
+load_dotenv()
+from services.gemini_service import detect_emotion_with_gemini
 
 app = Flask(__name__)
 CORS(app)
@@ -165,8 +168,13 @@ def detect_emotion_text():
         if not text:
             return jsonify({'error': 'No text provided'}), 400
 
-        prediction = text_emotion_model(text)
-        detected_emotion = prediction[0]['label']
+        # Try Gemini first, fallback to existing model
+        detected_emotion = detect_emotion_with_gemini(text)
+
+        if not detected_emotion:
+            # Fallback to existing DistilBERT model
+            prediction = text_emotion_model(text)
+            detected_emotion = prediction[0]['label']
 
         play_generated = data.get('play_generated', True)
         if play_generated:

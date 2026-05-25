@@ -42,3 +42,5 @@ Thumbs.db
 generated_music/
 music/
 static/
+.env
+
