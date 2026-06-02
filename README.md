@@ -86,7 +86,7 @@ It utilizes AI models to analyze text, voice, and facial expressions to detect e
 
 ## Datasets
 1. Facial: FER-2013 (7 classes, 48×48 grayscale images)
-2. Audio: RAVDESS/CREMA-D (8 classes, 40 MFCC features)
+2. Audio: RAVDESS (8 classes, 40 MFCC features)
 3. Text: Pretrained DistilBERT (no training needed)
 
 
