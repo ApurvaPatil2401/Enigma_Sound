@@ -13,7 +13,82 @@ It utilizes AI models to analyze text, voice, and facial expressions to detect e
 
 -> Frontend: Flutter  
 
--> AI & Machine Learning: TensorFlow, Librosa, CNN-LSTM model for audio, FER model for face detection
+-> AI & Machine Learning: PyTorch, TensorFlow, Librosa, CNN-LSTM model for audio, FER model for face detection
+
+# AI Model Architecture & Training Details
+
+## Text Emotion Model
+**Pretrained Model: bhadresh-savani/distilbert-base-uncased-emotion via Hugging Face pipeline**
+
+ -> Input: User text input (chat, voice-to-text transcription)
+ 
+ -> Output: 6 emotion classes (sadness, joy, love, anger, fear, surprise)
+ 
+ -> Integration: Labels are mapped to application-specific music emotions using label_mapping
+
+## Facial Emotion Model (CNN)
+**Architecture:**
+
+ -> Input: Grayscale 48×48 facial images (detected using OpenCV)
+ 
+ -> Convolutional Layers: 4-layer CNN with BatchNorm
+ 
+ -> Conv2d(1→64) → Conv2d(64→128) → Conv2d(128→256) → Conv2d(256→512)
+ 
+ -> Each conv layer followed by: ReLU + BatchNorm2d + MaxPool2d(2×2)
+ 
+ -> Fully Connected Layers: (512×3×3) → 512 → 256 → 7 (emotion classes)
+ 
+ -> Regularization: Dropout(0.4) after first FC layer (512 units)
+ 
+ -> Output: 7 emotion classes (Happy, Sad, Angry, Neutral, Surprised, Disgust, Fear)
+
+***************************
+**Training Configuration:**
+
+ -> Loss: CrossEntropyLoss
+ 
+ -> Optimizer: Adam (learning_rate=0.0003, weight_decay=0.0001)
+ 
+ -> Scheduler: StepLR (step_size=15, gamma=0.5) — reduces LR by half every 15 epochs
+ 
+ -> Augmentation: RandomHorizontalFlip, RandomRotation(15°), RandomPerspective
+ 
+ -> Epochs: 150 with early stopping based on training accuracy
+
+## Audio Emotion Model (CNN-LSTM)
+**Architecture:**
+
+ -> Input: 40-dimensional MFCC features extracted from audio using Librosa
+ 
+ -> CNN Feature Extractor: 1D CNN with BatchNorm
+     -  Conv1d(40→64) → BatchNorm1d
+      - Conv1d(64→128) → BatchNorm1d
+ 
+ -> LSTM Sequence Modeler: 2-layer Bidirectional LSTM (hidden_size=64)
+ 
+ -> Fully Connected Layers: 128 → 128 → 8 (emotion classes)
+ 
+ -> Regularization: Dropout(0.3)
+ 
+ -> Output: 8 emotion classes (Happy, Sad, Neutral, Fear, Surprise, Angry, Disgust, Calm)
+
+***********************************
+**Training Configuration:**
+
+ -> Loss: CrossEntropyLoss
+ 
+ -> Optimizer: Adam (learning_rate=0.0003, weight_decay=0.0001)
+ 
+ -> Scheduler: StepLR (step_size=15, gamma=0.5)
+ 
+ -> Epochs: 100+ with early stopping
+
+## Datasets
+1. Facial: FER-2013 (7 classes, 48×48 grayscale images)
+2. Audio: RAVDESS/CREMA-D (8 classes, 40 MFCC features)
+3. Text: Pretrained DistilBERT (no training needed)
+
 
 # 🌐 Community & Research Recognition
 
