@@ -287,16 +287,28 @@ instrument_mapping = {
 }
 
 # Emotion-based note selection
+# UPGRADED: Expanded note ranges spanning multiple octaves for full melodic movement
 note_range = {
-    "Happy": ["C4", "E4", "G4", "D4", "F4", "A4", "B4", "C5"],
-    "Sad": ["A3", "C4", "E4", "D3", "F3", "G3"],
-    "Neutral": ["D4", "F4", "A4", "C4", "E3", "G3"],
-    "Angry": ["E3", "G3", "B3", "C4", "A3", "D4"],
-    "Fear": ["F3", "A3", "C4", "D3", "E4"],
-    "Surprise": ["G3", "B3", "D4", "E3", "C5"],
-    "Disgust": ["F3", "D4", "B3", "C3", "G3"],
-    "Love": ["C4", "E4", "G4", "A4", "F4", "D4", "B4"]
+    "Happy": ["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5", "E5", "G5"], # C Major Scale over 2 octaves
+    "Sad": ["A3", "B3", "C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"],        # A Natural Minor Scale
+    "Neutral": ["D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5"],                # D Dorian Mode
+    "Angry": ["E3", "F3", "G3", "A3", "A#3", "B3", "C4", "D4", "E4"],           # E Phrygian / Blues Scale (Aggressive)
+    "Fear": ["F3", "G#3", "A3", "B3", "C4", "D#4", "E4", "F4"],                 # Diminished / Whole-Tone vibe (Anxious)
+    "Surprise": ["C4", "D4", "E4", "F#4", "G#4", "A#4", "C5"],                  # Whole Tone Scale (Dreamy/Shocked)
+    "Disgust": ["C3", "C#3", "E3", "F3", "F#3", "G#3", "A3"],                    # Chromatic/Dissonant clusters
+    "Love": ["F3", "A3", "C4", "E4", "G4", "A4", "C5", "D5", "E5"]              # F Major 7 / 9 Lydian landscape
+}
 
+# UPGRADED: Expanded progressions using rich, multi-note jazz & neo-classical chords
+chord_progressions = {
+    "Happy": [["C4", "E4", "G4", "B4"], ["A3", "C4", "E4", "G4"], ["F3", "A3", "C4", "E4"], ["G3", "B3", "D4", "F4"]], # Imaj7 - vi7 - IVmaj7 - V7
+    "Sad": [["A3", "C4", "E4"], ["F3", "A3", "C4"], ["C3", "E3", "G3"], ["G3", "B3", "D4"]],                          # i - VI - III - VII
+    "Neutral": [["D3", "F3", "A3", "C4"], ["G3", "B3", "D4", "F4"]],                                                # iim7 - V7
+    "Angry": [["E3", "G3", "B3"], ["F3", "A3", "C4"], ["D#3", "F#3", "A#3"]],                                       # Heavy, dark, shifting baselines
+    "Fear": [["B2", "D3", "F3", "G#3"], ["C3", "D#3", "F#3", "A3"]],                                                # Diminished 7th tensions
+    "Surprise": [["C4", "D4", "F#4", "A#4"], ["E4", "G#4", "A#4", "D5"]],
+    "Disgust": [["C3", "C#3", "G3"], ["F3", "F#3", "C4"]],                                                          # Awkward, tense intervals
+    "Love": [["F3", "A3", "C4", "E4"], ["G3", "B3", "D4", "F#4"], ["E3", "G3", "B3", "D4"]]                          # Rich, warm open chords
 }
 
 # Tempo range (BPM)
@@ -312,18 +324,7 @@ tempo_ranges = {
 
 }
 
-# Chord progressions
-chord_progressions = {
-    "Happy": [["C4", "E4", "G4"], ["F4", "A4", "C5"], ["G4", "B4", "D5"]],
-    "Sad": [["A3", "C4", "E4"], ["D3", "F3", "A3"], ["E3", "G3", "B3"]],
-    "Neutral": [["D4", "F4", "A4"], ["C4", "E4", "G4"], ["G3", "B3", "D4"]],
-    "Angry": [["E3", "G3", "B3"], ["D3", "F3", "A3"], ["C4", "E4", "G4"]],
-    "Fear": [["F3", "A3", "C4"], ["D3", "F3", "A3"], ["E3", "G3", "B3"]],
-    "Surprise": [["G3", "B3", "D4"], ["E3", "G3", "C4"], ["C4", "E4", "A4"]],
-    "Disgust": [["F3", "D4", "B3"], ["C3", "E3", "G3"], ["A3", "C4", "E4"]],
-    "Love": [["C4", "E4", "G4"], ["A3", "C4", "E4"], ["F4", "A4", "D5"]]
 
-}
 label_mapping = {
     "joy": "Happy",
     "happy": "Happy",
@@ -339,8 +340,9 @@ label_mapping = {
 
 def generate_music(detected_emotion):
     try:
-        timestamp = str(time.time())  # Use current timestamp to create a unique seed
+        timestamp = str(time.time())  # Create unique seed
         random.seed(timestamp)
+
         # Normalize emotion case to match dictionary keys
         detected_emotion = label_mapping.get(detected_emotion.lower(), detected_emotion.capitalize())
 
@@ -348,54 +350,81 @@ def generate_music(detected_emotion):
             logging.warning(f"Emotion '{detected_emotion}' not found. Using 'Neutral' as fallback.")
             detected_emotion = "Neutral"
 
-        # Create a new music stream
-        s = stream.Stream()
+        # Create the main container stream
+        s = stream.Score()
 
-        # Get emotion-based settings
+        # Create two separate, parallel tracks
+        melody_part = stream.Part()
+        harmony_part = stream.Part()
+
+        # Fetch emotion settings
         instruments = instrument_mapping.get(detected_emotion, instrument_mapping["Neutral"])
         selected_notes = note_range.get(detected_emotion, note_range["Neutral"])
         tempo_range = tempo_ranges.get(detected_emotion, tempo_ranges["Neutral"])
         chords = chord_progressions.get(detected_emotion, chord_progressions["Neutral"])
 
-        # Ensure the main instrument is not duplicated
-        if not any(isinstance(el, instrument.Instrument) for el in s):
-            s.append(instruments[0])
+        # Assign instruments to their respective tracks
+        melody_part.append(instruments[0])
+        # Use second instrument for harmony if available, else fallback to main
+        harmony_part.append(instruments[1] if len(instruments) > 1 else instruments[0])
 
-        # Set tempo
+        # Set the global tempo
         tempo_value = random.randint(*tempo_range)
-        s.append(tempo.MetronomeMark(number=tempo_value))
+        s.insert(0, tempo.MetronomeMark(number=tempo_value))
 
         beats_per_second = tempo_value / 60.0
         total_beats_needed = 30 * beats_per_second
-        current_beats = 0
+
+        # --- LAYER 1: GENERATE STEADY HARMONY BACKGROUND ---
+        current_harmony_beats = 0
         chord_counter = 0
-        instrument_switched = False
+        while current_harmony_beats < total_beats_needed:
+            base_chord_notes = chords[chord_counter % len(chords)].copy()
+            bg_chord = chord.Chord(base_chord_notes)
 
-        while current_beats < total_beats_needed:
-            section = "Verse" if current_beats < total_beats_needed / 2 else "Chorus"
+            # Chords last longer (sustained pads/rhythms)
+            bg_chord.quarterLength = random.choice([2.0, 4.0])
+            bg_chord.volume.velocity = random.randint(60, 75) # Keep background softer
 
-            # Add second instrument only once in the chorus
-            if section == "Chorus" and not instrument_switched and len(instruments) > 1:
-                s.append(instruments[1])
-                instrument_switched = True
+            harmony_part.append(bg_chord)
+            current_harmony_beats += bg_chord.quarterLength
+            chord_counter += 1
 
-            if random.random() < 0.3:  # 30% chance of a chord
-                harmony = chord.Chord(chords[chord_counter % len(chords)])
-                harmony.quarterLength = random.choice([0.5, 1.0, 1.5, 2.0])
-                s.append(harmony)
-                current_beats += harmony.quarterLength
-                chord_counter += 1
+        # --- LAYER 2: GENERATE THE MELODY ON TOP ---
+        current_melody_beats = 0
+        if 'last_note_index' in locals(): del last_note_index
+
+        # Emotional rhythmic weighting
+        rhythm_choices = [0.5, 1.0, 1.5]
+        if detected_emotion in ["Happy", "Surprise", "Angry"]:
+            rhythm_choices = [0.25, 0.5, 1.0]
+        elif detected_emotion in ["Sad", "Fear", "Calm"]:
+            rhythm_choices = [1.0, 2.0]
+
+        while current_melody_beats < total_beats_needed:
+            if 'last_note_index' not in locals():
+                last_note_index = random.randint(0, len(selected_notes) - 1)
+
+            # Step-based walking for natural melody movement
+            if random.random() < 0.75:
+                step = random.choice([-2, -1, 1, 2])
+                current_note_index = max(0, min(len(selected_notes) - 1, last_note_index + step))
             else:
-                pitch = random.choice(selected_notes)
-                duration = random.choice([0.5, 1.0, 1.5, 2.0, 3.0])
-                melody_note = note.Note(pitch, quarterLength=duration)
+                current_note_index = random.randint(0, len(selected_notes) - 1)
 
-                # Occasionally add the third instrument, ensuring no duplication
-                if random.random() < 0.1 and len(instruments) > 2 and not any(isinstance(el, type(instruments[2])) for el in s):
-                    s.append(instruments[2])
+            last_note_index = current_note_index
+            pitch = selected_notes[current_note_index]
+            duration = random.choice(rhythm_choices)
 
-                s.append(melody_note)
-                current_beats += duration
+            melody_note = note.Note(pitch, quarterLength=duration)
+            melody_note.volume.velocity = random.randint(85, 110) # Keep melody expressive and loud
+
+            melody_part.append(melody_note)
+            current_melody_beats += duration
+
+        # Combine both parallel tracks into the final score
+        s.insert(0, melody_part)
+        s.insert(0, harmony_part)
 
         # Save as MIDI
         random_number = random.randint(1000, 9999)
