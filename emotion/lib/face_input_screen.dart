@@ -47,10 +47,9 @@ class _FaceInputScreenState extends State<FaceInputScreen> {
         return;
       }
 
-      // Select the camera based on the direction
       _currentCamera = cameras.firstWhere(
             (camera) => camera.lensDirection == lensDirection,
-        orElse: () => cameras.first, // Fallback to the first available camera
+        orElse: () => cameras.first,
       );
 
       _cameraController = CameraController(_currentCamera!, ResolutionPreset.medium);
@@ -67,7 +66,7 @@ class _FaceInputScreenState extends State<FaceInputScreen> {
       return;
     }
 
-    if (_isLoading) return; // Prevent multiple submissions
+    if (_isLoading) return;
 
     setState(() {
       _isLoading = true;
@@ -79,7 +78,7 @@ class _FaceInputScreenState extends State<FaceInputScreen> {
 
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('http://192.168.1.11:5000/detect-emotion-face'),
+        Uri.parse('http://192.168.1.8:5000/detect-emotion-face'),
       );
       request.files.add(await http.MultipartFile.fromPath('image', image.path));
 
@@ -114,9 +113,9 @@ class _FaceInputScreenState extends State<FaceInputScreen> {
 
   void _toggleCamera() {
     if (_currentCamera?.lensDirection == CameraLensDirection.front) {
-      _initializeCamera(CameraLensDirection.back); // Switch to back camera
+      _initializeCamera(CameraLensDirection.back);
     } else {
-      _initializeCamera(CameraLensDirection.front); // Switch to front camera
+      _initializeCamera(CameraLensDirection.front);
     }
   }
 
@@ -134,69 +133,96 @@ class _FaceInputScreenState extends State<FaceInputScreen> {
         centerTitle: true,
         backgroundColor: Colors.purpleAccent,
       ),
-      body: Center(
-        child: _permissionsGranted
-            ? Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Camera Preview with a frame
-            if (_cameraController != null && _initializeControllerFuture != null)
-              FutureBuilder<void>(
-                future: _initializeControllerFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.done) {
-                    return ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: CameraPreview(_cameraController!),
-                    );
-                  } else {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                },
-              ),
-            const SizedBox(height: 20),
-            // Capture Image Button with a modern rounded design
-            ElevatedButton(
-              onPressed: _captureImage,
-              style: ElevatedButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ), backgroundColor: Colors.purpleAccent,
-                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-              ),
-              child: const Text('Capture Image', style: TextStyle(fontSize: 18)),
-            ),
-            const SizedBox(height: 20),
-            // Camera Flip Button with more prominent design
-            ElevatedButton(
-              onPressed: _toggleCamera,
-              style: ElevatedButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ), backgroundColor: Colors.pinkAccent,
-                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-              ),
-              child: const Text('Flip Camera', style: TextStyle(fontSize: 18)),
-            ),
-            const SizedBox(height: 20),
-            // Loading Indicator
-            if (_isLoading) const CircularProgressIndicator(),
-            // Detected Emotion Text with more emphasis
-            if (_detectedEmotion.isNotEmpty && !_isLoading)
-              Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Text(
-                  'Detected Emotion: $_detectedEmotion',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blueAccent,
+      body: _permissionsGranted
+          ? SafeArea(
+        child: SingleChildScrollView( // FIX 1: Wraps everything to enable scrolling and kill the overflow lines
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Camera Preview container with a constrained frame height
+              if (_cameraController != null && _initializeControllerFuture != null)
+                FutureBuilder<void>(
+                  future: _initializeControllerFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.done) {
+                      return Center(
+                        child: Container(
+                          constraints: BoxConstraints(
+                            maxHeight: MediaQuery.of(context).size.height * 0.45, // FIX 2: Restricts the camera to maximum 45% screen height
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: CameraPreview(_cameraController!),
+                          ),
+                        ),
+                      );
+                    } else {
+                      return const SizedBox(
+                        height: 200,
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                  },
+                ),
+              const SizedBox(height: 24),
+              // Capture Image Button
+              Center(
+                child: ElevatedButton(
+                  onPressed: _captureImage,
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    backgroundColor: Colors.purpleAccent,
+                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                   ),
+                  child: const Text('Capture Image', style: TextStyle(fontSize: 18, color: Colors.white)),
                 ),
               ),
-          ],
-        )
-            : const Center(child: Text("Camera permission is required", style: TextStyle(fontSize: 18, color: Colors.red))),
+              const SizedBox(height: 16),
+              // Camera Flip Button
+              Center(
+                child: ElevatedButton(
+                  onPressed: _toggleCamera,
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    backgroundColor: Colors.pinkAccent,
+                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                  ),
+                  child: const Text('Flip Camera', style: TextStyle(fontSize: 18, color: Colors.white)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Loading Indicator
+              if (_isLoading) const Center(child: CircularProgressIndicator()),
+              // Detected Emotion Text
+              if (_detectedEmotion.isNotEmpty && !_isLoading)
+                Padding(
+                  padding: const EdgeInsets.all(10.0),
+                  child: Text(
+                    'Detected Emotion: $_detectedEmotion',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blueAccent,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      )
+          : const Center(
+        child: Text(
+          "Camera permission is required",
+          style: TextStyle(fontSize: 18, color: Colors.red),
+        ),
       ),
     );
   }
