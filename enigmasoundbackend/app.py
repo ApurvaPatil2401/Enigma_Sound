@@ -83,7 +83,7 @@ class EmotionCNN(nn.Module):
 try:
     face_emotion_model = EmotionCNN().to(device)
     state_dict = torch.load(os.path.join(BASE_DIR, 'emotion_model', 'best_emotion_model.pth'), map_location=device)
-    emotion_labels = ['Angry', 'Disgust', 'Fear', 'Happy','Neutral','Sad', 'Surprise']
+    emotion_labels = ['Angry', 'Disgust', 'Fear', 'Sad', 'Happy', 'Surprise', 'Neutral']
     face_emotion_model.load_state_dict(state_dict)
     face_emotion_model.eval()
 except Exception as e:
@@ -481,4 +481,5 @@ def serve_static(filename):
     return send_from_directory('static', filename, mimetype="audio/mpeg")
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000 ,threaded=True)
+    #app.run(debug=True, host='0.0.0.0', port=5000 ,threaded=True)
+    app.run(host='192.168.1.8', port=5000, debug=True, use_reloader=False)
