@@ -147,8 +147,7 @@ static const String baseUrl = 'http://YOUR_IP:5000';
 # Low-Resource Edge Device Demo : 
 
 
-https://github.com/user-attachments/assets/dbf1bff7-d2cb-431d-acc8-0ff61844cd2d
-
+https://github.com/user-attachments/assets/ceb6a8cb-315c-4668-a3c7-f6a8139d0253
 
 
 
