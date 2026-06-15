@@ -481,5 +481,5 @@ def serve_static(filename):
     return send_from_directory('static', filename, mimetype="audio/mpeg")
 
 if __name__ == '__main__':
-    #app.run(debug=True, host='0.0.0.0', port=5000 ,threaded=True)
-    app.run(host='192.168.1.8', port=5000, debug=True, use_reloader=False)
+    app.run(debug=True, host='0.0.0.0', port=5000 ,threaded=True)
+    
