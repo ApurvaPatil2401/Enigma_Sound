@@ -95,6 +95,9 @@ It utilizes AI models to analyze text, voice, and facial expressions to detect e
 This project is actively discussed within the global AI developer ecosystem and is featured on the **Google AI Developers Forum**. 
 * **Official Discussion Thread:** [https://discuss.ai.google.dev/t/enigma-sound-multi-modal-emotion-to-music-pipeline-fusing-face-voice-and-text-ieee-research/137178]
 
+**Live Visual Architecture Demo Now Hosted on Hugging Face Spaces!**
+
+https://huggingface.co/spaces/ApurvaDev111/enigma-sound-ai
 ---
 
 # 🛠 Setup & Installation
