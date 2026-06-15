@@ -92,7 +92,7 @@ class _AudioInputScreenState extends State<AudioInputScreen> {
     try {
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('${AppConfig.baseUrl}/detect-emotion-face'),
+        Uri.parse('${AppConfig.baseUrl}/detect-emotion-audio'),
       );
       request.files.add(await http.MultipartFile.fromPath('audio', _filePath!));
 
