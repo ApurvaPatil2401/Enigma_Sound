@@ -2,7 +2,7 @@
 
 # Published IEEE research paper :
 🔗 https://ieeexplore.ieee.org/document/10932090/
-
+ 
 # Objective :
 The Enigma Sound App aimed to provide a seamless and intuitive music experience by leveraging AI to enhance personalization. It sought to solve common issues such as poor sound quality, lack of personalized recommendations, and inefficient user experience in existing music apps.
 
