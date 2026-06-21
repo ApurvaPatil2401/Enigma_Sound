@@ -97,7 +97,7 @@ This project is actively discussed within the global AI developer ecosystem and 
 
 **Live Visual Architecture Demo Now Hosted on Hugging Face Spaces!**
 
-https://huggingface.co/spaces/ApurvaDev111/enigma-sound-ai
+[https://huggingface.co/spaces/ApurvaDev111/enigma-sound-ai](https://huggingface.co/spaces/ApurvaDev111/enigma-sound-ai-demo)
 ---
 
 # 🛠 Setup & Installation
