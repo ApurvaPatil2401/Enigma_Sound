@@ -83,7 +83,7 @@ class EmotionCNN(nn.Module):
 try:
     face_emotion_model = EmotionCNN().to(device)
     state_dict = torch.load(os.path.join(BASE_DIR, 'emotion_model', 'best_emotion_model.pth'), map_location=device)
-    face_emotion_labels = ['Angry', 'Disgust', 'Fear', 'Happy', 'Neutral', 'Sad', 'Surprise']
+    face_emotion_labels = ['Angry', 'Disgust', 'Fear', 'Sad', 'Happy', 'Surprise', 'Neutral']
     face_emotion_model.load_state_dict(state_dict)
     face_emotion_model.eval()
 except Exception as e:
