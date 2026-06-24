@@ -83,7 +83,7 @@ class EmotionCNN(nn.Module):
 try:
     face_emotion_model = EmotionCNN().to(device)
     state_dict = torch.load(os.path.join(BASE_DIR, 'emotion_model', 'best_emotion_model.pth'), map_location=device)
-    emotion_labels = ['Angry', 'Disgust', 'Fear', 'Sad', 'Happy', 'Surprise', 'Neutral']
+    face_emotion_labels = ['Angry', 'Disgust', 'Fear', 'Sad', 'Happy', 'Surprise', 'Neutral']
     face_emotion_model.load_state_dict(state_dict)
     face_emotion_model.eval()
 except Exception as e:
@@ -135,6 +135,46 @@ audio_emotion_model = AudioEmotionModel(num_classes)
 audio_emotion_model.load_state_dict(torch.load(MODEL_PATH, map_location=torch.device('cpu')))
 audio_emotion_model.eval()  # Set model to evaluation mode
 
+import torch.nn.functional as F
+
+def get_standardized_result(modality_name, raw_output_tensor, emotion_labels):
+    """
+    Wraps the raw model output into the standardized JSON contract.
+    """
+    # 1. Ensure the tensor is on CPU and convert to probabilities
+    # Using softmax ensures all outputs sum to 1.0
+    probabilities = F.softmax(raw_output_tensor, dim=1).detach().cpu().squeeze().tolist()
+
+    # If the model outputs a single value (e.g., shape is empty after squeeze), wrap it in a list
+    if not isinstance(probabilities, list):
+        probabilities = [probabilities]
+
+    # 2. Safety check: ensure number of labels matches model output
+    if len(probabilities) != len(emotion_labels):
+        raise ValueError(f"Mismatch: Model output {len(probabilities)} values, but provided {len(emotion_labels)} labels.")
+
+    # 3. Map probabilities to labels
+    label_distribution = {emotion_labels[i]: probabilities[i] for i in range(len(emotion_labels))}
+
+    # 4. Normalize to Project Standard Vocabulary
+    normalized_distribution = {}
+    for label, prob in label_distribution.items():
+        # Ensure label_mapping is accessible here (define it globally or pass it in)
+        standard_label = label_mapping.get(label.lower(), label.capitalize())
+        normalized_distribution[standard_label] = normalized_distribution.get(standard_label, 0) + prob
+
+    top_label = max(normalized_distribution, key=normalized_distribution.get)
+    confidence = normalized_distribution[top_label]
+
+    return {
+        "modality": modality_name,
+        "status": "ok",
+        "top_label": top_label,
+        "label_distribution": normalized_distribution,
+        "confidence": float(confidence), # Ensure it is a standard float for JSON
+        "input_quality": {"score": 1.0, "flags": []}
+    }
+
 def analyze_audio_emotion(mfccs):
     """Predict emotion from MFCC features using the loaded PyTorch model."""
     try:
@@ -158,34 +198,50 @@ def analyze_audio_emotion(mfccs):
 @app.route('/detect-emotion-text', methods=['POST'])
 def detect_emotion_text():
     if text_emotion_model is None:
-        logging.error("Text emotion model is not initialized!")
         return jsonify({'error': 'Text emotion model not initialized'}), 500
 
     try:
         data = request.get_json()
         text = data.get('text', '')
-
         if not text:
             return jsonify({'error': 'No text provided'}), 400
 
-        # Try Gemini first, fallback to existing model
+        # 1. Get raw emotion data
         detected_emotion = detect_emotion_with_gemini(text)
 
+        # 2. Fallback to local model
         if not detected_emotion:
-            # Fallback to existing DistilBERT model
             prediction = text_emotion_model(text)
             detected_emotion = prediction[0]['label']
 
+        # 3. Create the standardized result structure
+        # Since text models often return just a label, we provide the structure
+        # required for your frontend to parse correctly.
+        result = {
+            "modality": "text",
+            "status": "ok",
+            "top_label": detected_emotion,
+            "label_distribution": {detected_emotion: 1.0}, # Placeholder
+            "confidence": 1.0,
+            "input_quality": {"score": 1.0, "flags": []}
+        }
+
+        final_response = {
+            "emotion": detected_emotion,
+            "debug_info": result
+        }
+
+        # 4. Handle Music Generation
         play_generated = data.get('play_generated', True)
         if play_generated:
             music_path = generate_music(detected_emotion)
             if music_path and os.path.exists(music_path):
-                music_url = f"{request.host_url}static/{os.path.basename(music_path)}"
-                return jsonify({'emotion': detected_emotion, 'music_url': music_url}), 200
+                final_response["music_url"] = f"{request.host_url}static/{os.path.basename(music_path)}"
+                return jsonify(final_response), 200
             else:
                 return jsonify({'error': 'Music file not found'}), 404
 
-        return jsonify({'emotion': detected_emotion}), 200
+        return jsonify(final_response), 200
 
     except Exception as e:
         logging.error(f"Error in emotion detection: {e}")
@@ -206,17 +262,35 @@ def detect_emotion_audio():
             return jsonify({'error': 'Audio file is empty or corrupted'}), 400
 
         mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40).T
-        detected_emotion = analyze_audio_emotion(mfccs)
+
+        with torch.no_grad():
+            raw_output = audio_emotion_model(torch.tensor(mfccs, dtype=torch.float32).unsqueeze(0).permute(0, 2, 1))
+            result = get_standardized_result("audio", raw_output, emotion_labels)
+            detected_emotion = result['top_label']
+
+        result = get_standardized_result("audio", raw_output, emotion_labels)
+        detected_emotion = result['top_label']
+
+        final_response = {
+            "emotion": detected_emotion,
+            "debug_info": result
+        }
 
         if play_generated:
             music_path = generate_music(detected_emotion)
             if music_path and os.path.exists(music_path):
                 music_url = f"{request.host_url}static/{os.path.basename(music_path)}"
-                return jsonify({'emotion': detected_emotion, 'music_url': music_url}), 200
+                # Add the music_url to your response
+                final_response["music_url"] = music_url
+                return jsonify(final_response), 200
             else:
-                return jsonify({'error': 'Music file not found'}), 404
+                return jsonify({'error': 'Music file generation failed'}), 404
+
+        # Final return for play_generated=False
+        return jsonify(final_response), 200
 
     except Exception as e:
+        logging.error(f"Error in detect_emotion_audio: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/detect-emotion-face', methods=['POST'])
@@ -225,7 +299,6 @@ def detect_emotion_face():
         if 'image' not in request.files:
             return jsonify({'error': 'No image file provided'}), 400
 
-        # Get play_generated flag from form-data (Convert to Boolean)
         play_generated = request.form.get('play_generated', 'true').lower() == 'true'
 
         image_file = request.files['image']
@@ -234,44 +307,54 @@ def detect_emotion_face():
         if img is None:
             return jsonify({'error': 'Invalid image file'}), 400
 
+        # Face detection
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
         if len(faces) == 0:
             return jsonify({'error': 'No face detected'}), 400
 
-        # Process the first detected face (assuming one face)
+        # Process face: resize and normalize
         x, y, w, h = faces[0]
-        face = img[y:y+h, x:x+w]
-        face = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)  # Convert face to grayscale
-        face = cv2.resize(face, (48, 48))  # Resize to match model input size
-        face = face.astype('float32') / 255  # Normalize pixel values
-        face = (face - 0.5) / 0.5  # Match normalization during training
+        face = cv2.resize(gray[y:y+h, x:x+w], (48, 48))
+        face = face.astype('float32') / 255.0
+        face = (face - 0.5) / 0.5
 
-        face = np.expand_dims(face, axis=0)  # Add batch dimension
-        face = np.expand_dims(face, axis=0)  # Add channel dimension (grayscale)
-
-        face_tensor = torch.from_numpy(face).float().to(device)
+        # Prepare tensor (Batch, Channel, Height, Width)
+        face_tensor = torch.from_numpy(face.reshape(1, 1, 48, 48)).float().to(device)
 
         with torch.no_grad():
             output = face_emotion_model(face_tensor)
-            _, predicted = torch.max(output, 1)
-            detected_emotion = emotion_labels[predicted.item()]
 
-        # Generate music based on detected emotion
+            # --- SAFETY CHECK: Prevent IndexErrors ---
+            num_outputs = output.shape[1]
+            if num_outputs != len(face_emotion_labels):
+                logging.error(f"Mismatch! Model outputs {num_outputs} values, but you have {len(emotion_labels)} labels.")
+                return jsonify({'error': f'Model-Label mismatch: {num_outputs} vs {len(emotion_labels)}'}), 500
+
+            # Use your standardized contract wrapper
+            result = get_standardized_result("face", output, face_emotion_labels)
+            detected_emotion = result['top_label']
+
+        # Build standardized response
+        final_response = {
+            "emotion": detected_emotion,
+            "debug_info": result
+        }
+
+        # Music generation logic
         if play_generated:
             music_path = generate_music(detected_emotion)
-            if music_path and os.path.exists(music_path):  # Ensure the music file was generated successfully
-                music_url = f"{request.host_url}static/{os.path.basename(music_path)}"
-                return jsonify({'emotion': detected_emotion, 'music_url': music_url}), 200
+            if music_path and os.path.exists(music_path):
+                final_response["music_url"] = f"{request.host_url}static/{os.path.basename(music_path)}"
+                return jsonify(final_response), 200
             else:
-                logging.error("Generated music file not found!")
                 return jsonify({'error': 'Music file not found'}), 404
-        else:
-            return jsonify({'emotion': detected_emotion}), 200
+
+        return jsonify(final_response), 200
 
     except Exception as e:
-        logging.error(f"Error in detect_emotion_face: {str(e)}")
+        logging.exception("Detailed error in detect_emotion_face")
         return jsonify({'error': str(e)}), 500
 
 # Define instruments for each emotion
@@ -482,4 +565,3 @@ def serve_static(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000 ,threaded=True)
-    
