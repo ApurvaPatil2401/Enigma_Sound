@@ -37,7 +37,7 @@ class _MusicPlayerScreenState extends State<MusicPlayerScreen> {
     }
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.1.8:5000/generate_music'),
+        Uri.parse('AppConfig.generateMusicEndpoint'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'detected_emotion': emotion}),
       );

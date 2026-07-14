@@ -3,6 +3,7 @@ import 'text_input_screen.dart';
 import 'audio_input_screen.dart';
 import 'face_input_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'multimodal_input_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -120,42 +121,57 @@ class InputSelectionScreen extends StatelessWidget {
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Colors.purple[700]!, Colors.purple[300]!], // Smooth Gradient
+            colors: [Colors.purple[700]!, Colors.purple[300]!],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
         ),
-        child: Column(
-          children: [
-            Expanded(child: _buildTile(context, Icons.text_fields, 'Text Input', const TextInputScreen())),
-            Expanded(child: _buildTile(context, Icons.mic, 'Audio Input', const AudioInputScreen())),
-            Expanded(child: _buildTile(context, Icons.camera_alt, 'Facial Expression', const FaceInputScreen())),
-          ],
+        child: SafeArea(
+          child: Column(
+            children: [
+              // New Prominent Multimodal Selection
+              Expanded(
+                  flex: 2,
+                  child: _buildTile(
+                      context,
+                      Icons.all_inclusive,
+                      'Combined Multimodal Input',
+                      const MultimodalInputScreen(),
+                      isHero: true
+                  )
+              ),
+              const Divider(color: Colors.white30, indent: 20, endIndent: 20),
+              Expanded(child: _buildTile(context, Icons.text_fields, 'Text Input', const TextInputScreen())),
+              Expanded(child: _buildTile(context, Icons.mic, 'Audio Input', const AudioInputScreen())),
+              Expanded(child: _buildTile(context, Icons.camera_alt, 'Facial Expression', const FaceInputScreen())),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildTile(BuildContext context, IconData icon, String title, Widget screen) {
+  Widget _buildTile(BuildContext context, IconData icon, String title, Widget screen, {bool isHero = false}) {
     return InkWell(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => screen)),
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: Colors.white.withOpacity(0.2), // Transparent White Effect
+          borderRadius: BorderRadius.circular(16),
+          color: isHero ? Colors.white.withOpacity(0.35) : Colors.white.withOpacity(0.15),
+          border: isHero ? Border.all(color: Colors.white54, width: 1.5) : null,
         ),
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 50, color: Colors.white),
-              const SizedBox(height: 10),
+              Icon(icon, size: isHero ? 60 : 40, color: Colors.white),
+              const SizedBox(height: 8),
               Text(
                 title,
                 style: GoogleFonts.poppins(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
+                  fontSize: isHero ? 24 : 18,
+                  fontWeight: isHero ? FontWeight.bold : FontWeight.w600,
                   color: Colors.white,
                 ),
               ),
