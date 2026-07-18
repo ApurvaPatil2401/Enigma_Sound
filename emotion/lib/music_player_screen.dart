@@ -6,12 +6,19 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_fonts/google_fonts.dart';
 
+import 'config.dart'; // Imports your AppConfig properties dynamically
+
 class MusicPlayerScreen extends StatefulWidget {
   final String emotion;
+  final String? audioUrl; // Optional parameter so separate modules don't break!
   final int randomNumber;
 
-  const MusicPlayerScreen({super.key, required this.emotion, required this.randomNumber});
-
+  const MusicPlayerScreen({
+    super.key,
+    required this.emotion,
+    this.audioUrl, // Not required, defaults to null
+    required this.randomNumber,
+  });
 
   @override
   _MusicPlayerScreenState createState() => _MusicPlayerScreenState();
@@ -27,42 +34,78 @@ class _MusicPlayerScreenState extends State<MusicPlayerScreen> {
   void initState() {
     super.initState();
     _audioPlayer = AudioPlayer();
-    generateMusic(widget.emotion);
+
+    // Case 1: If the multimodal screen passed an audioUrl directly, use it!
+    if (widget.audioUrl != null) {
+      setState(() {
+        _musicUrl = widget.audioUrl;
+        _isLoading = false;
+      });
+      _playGeneratedMusic();
+    } else {
+      // Case 2: Fallback for individual modules (Face, Text, Audio)
+      generateMusic(widget.emotion);
+    }
   }
 
+  // Fallback music generator utilizing the existing multimodal pipeline dynamically
   Future<void> generateMusic(String emotion) async {
     if (emotion.isEmpty || emotion == 'Unknown') {
       setState(() => _isLoading = false);
       return;
     }
     try {
-      final response = await http.post(
-        Uri.parse('AppConfig.generateMusicEndpoint'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'detected_emotion': emotion}),
+      print("DEBUG FALLBACK: Triggering music production via AppConfig...");
+
+      // Target the active base URL configuration cleanly
+      String targetBase = 'http://192.168.1.6:5000';
+      try {
+        if (AppConfig.baseUrl.isNotEmpty) {
+          targetBase = AppConfig.baseUrl;
+        }
+      } catch (_) {}
+
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$targetBase/detect-emotion-multimodal'),
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+      request.fields['text'] = emotion;
+
+      final response = await request.send();
+      final responseData = await response.stream.bytesToString();
+      final decoded = json.decode(responseData);
+
+      if (decoded['success'] == true && decoded['music_url'] != null) {
         setState(() {
-          _musicUrl = data['music_url'];
+          _musicUrl = decoded['music_url'];
           _isLoading = false;
         });
+
+        // Auto-play the fallback track instantly
+        _playGeneratedMusic();
       } else {
         setState(() => _isLoading = false);
       }
     } catch (e) {
+      print("Error in fallback music generation: $e");
       setState(() => _isLoading = false);
     }
   }
 
   Future<void> _playGeneratedMusic() async {
     if (_musicUrl != null) {
-      await _audioPlayer.stop();
-      await _audioPlayer.setSourceUrl(_musicUrl!);
-      await _audioPlayer.setReleaseMode(ReleaseMode.loop);
-      await _audioPlayer.resume();
-      setState(() => _isPlaying = true);
+      try {
+        await _audioPlayer.stop();
+        await _audioPlayer.setSourceUrl(_musicUrl!);
+        await _audioPlayer.setReleaseMode(ReleaseMode.loop);
+        await _audioPlayer.resume();
+        setState(() => _isPlaying = true);
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Playback Error: $e')),
+        );
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No music available to play')));
@@ -73,8 +116,8 @@ class _MusicPlayerScreenState extends State<MusicPlayerScreen> {
     final Uri url = Uri.parse('https://open.spotify.com/search/$emotion');
     if (await canLaunchUrl(url)) {
       await _audioPlayer.stop();
-      await launchUrl(url, mode: LaunchMode.externalApplication);
       setState(() => _isPlaying = false);
+      await launchUrl(url, mode: LaunchMode.externalApplication);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open Spotify.')),
@@ -95,7 +138,7 @@ class _MusicPlayerScreenState extends State<MusicPlayerScreen> {
         title: Text(
           'Music for ${widget.emotion}',
           style: GoogleFonts.poppins(
-            color: Colors.white, // Set title text color to white
+            color: Colors.white,
           ),
         ),
         centerTitle: true,
@@ -103,29 +146,33 @@ class _MusicPlayerScreenState extends State<MusicPlayerScreen> {
       ),
       body: Stack(
         children: [
-          // Background Image
+          // Background Matrix Panel
           Positioned.fill(
-            child: Image.asset(
-              'assets/music_bg.jpg', // Replace with your image path
-              fit: BoxFit.cover,
-              color: Colors.black.withOpacity(0.3),
-              colorBlendMode: BlendMode.darken,
+            child: Container(
+              color: Colors.black87,
             ),
           ),
 
-          // Content
+          // Content Display Hierarchy
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (_isLoading)
-                const CircularProgressIndicator()
+                const Center(child: CircularProgressIndicator())
               else ...[
                 if (_musicUrl != null)
                   _buildMusicTile(
-                    icon: Icons.play_circle_fill,
+                    icon: _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
                     title: "Generated Music",
                     subtitle: _isPlaying ? "Playing..." : "Tap to play generated music",
-                    onTap: _playGeneratedMusic,
+                    onTap: () async {
+                      if (_isPlaying) {
+                        await _audioPlayer.pause();
+                        setState(() => _isPlaying = false);
+                      } else {
+                        await _playGeneratedMusic();
+                      }
+                    },
                   ),
                 _buildMusicTile(
                   icon: Icons.music_note,
@@ -163,8 +210,7 @@ class _MusicPlayerScreenState extends State<MusicPlayerScreen> {
             end: Alignment.bottomRight,
           ),
           boxShadow: [
-            BoxShadow(
-                color: Colors.black26, blurRadius: 6, offset: Offset(2, 4))
+            const BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(2, 4))
           ],
         ),
         child: Row(
@@ -186,8 +232,7 @@ class _MusicPlayerScreenState extends State<MusicPlayerScreen> {
                   const SizedBox(height: 5),
                   Text(
                     subtitle,
-                    style: GoogleFonts.poppins(
-                        fontSize: 14, color: Colors.white70),
+                    style: GoogleFonts.poppins(fontSize: 14, color: Colors.white70),
                   ),
                 ],
               ),

@@ -137,36 +137,47 @@ class _MultimodalInputScreenState extends State<MultimodalInputScreen> {
       final responseData = await response.stream.bytesToString();
       final decoded = json.decode(responseData);
 
-      String finalEmotion = decoded['emotion'] ?? 'Unknown';
+      // Extract 'dominant_emotion' instead of 'emotion'
+      String finalEmotion = decoded['dominant_emotion'] ?? 'Unknown';
 
-      if (finalEmotion != 'Unknown') {
+      // Extract 'music_url' directly from the payload response
+      String? completeMusicUrl = decoded['music_url'];
+
+      if (decoded['success'] == true && finalEmotion != 'Unknown' && completeMusicUrl != null) {
+        print("DEBUG MULTIMODAL: Final Emotion -> $finalEmotion");
+        print("DEBUG MULTIMODAL: Streaming target URL -> $completeMusicUrl");
+
         // Clear references for next iteration round
         setState(() {
           _capturedImage = null;
           _textController.clear();
         });
 
+        // 4. Pass the parameters down safely to the player screen
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => MusicPlayerScreen(
                 emotion: finalEmotion,
+                audioUrl: completeMusicUrl,
                 randomNumber: Random().nextInt(1000)
             ),
           ),
         );
       } else {
+        String errorMsg = decoded['error'] ?? 'Could not definitively calculate emotion.';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not definitively calculate emotion. Try providing more inputs!')),
+          SnackBar(content: Text('Server Error: $errorMsg')),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Submission Error: $e')),
       );
-    } finally {
+    } // The missing catch block
+    finally {
       setState(() => _isLoading = false);
-    }
+    } // The missing finally block
   }
 
   @override
