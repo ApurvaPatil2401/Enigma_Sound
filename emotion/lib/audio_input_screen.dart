@@ -33,7 +33,14 @@ class _AudioInputScreenState extends State<AudioInputScreen> {
   void dispose() {
     _recorder.closeRecorder();
     if (_filePath != null) {
-      File(_filePath!).deleteSync();
+      try {
+        final file = File(_filePath!);
+        if (file.existsSync()) {
+          file.deleteSync();
+        }
+      } catch (e) {
+        print('Error deleting file: $e');
+      }
     }
     super.dispose();
   }
@@ -90,9 +97,12 @@ class _AudioInputScreenState extends State<AudioInputScreen> {
     setState(() => _isLoading = true);
 
     try {
+      print("DEBUG AUDIO: Sending recording to multimodal engine pipeline...");
+
+      // FIX 1: Routing audio payload through the working multimodal pipeline
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('${AppConfig.baseUrl}/detect-emotion-audio'),
+        Uri.parse('${AppConfig.baseUrl}/detect-emotion-multimodal'),
       );
       request.files.add(await http.MultipartFile.fromPath('audio', _filePath!));
 
@@ -100,15 +110,31 @@ class _AudioInputScreenState extends State<AudioInputScreen> {
       final responseData = await response.stream.bytesToString();
       final decodedResponse = json.decode(responseData);
 
-      setState(() => _detectedEmotion = decodedResponse['emotion'] ?? 'Unknown');
+      // FIX 2: Mapping key names to dominant_emotion to match the pipeline backend
+      String finalEmotion = decodedResponse['dominant_emotion'] ?? 'Unknown';
+      String? completeMusicUrl = decodedResponse['music_url'];
 
-      if (_detectedEmotion.isNotEmpty) {
+      setState(() {
+        _detectedEmotion = finalEmotion;
+      });
+
+      if (finalEmotion.isNotEmpty && finalEmotion != 'Unknown') {
         int randomNumber = Random().nextInt(1000);
+
+        // FIX 3: Safely passing audioUrl down to prevent fallback loops
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => MusicPlayerScreen(emotion: _detectedEmotion, randomNumber: randomNumber),
+            builder: (context) => MusicPlayerScreen(
+              emotion: finalEmotion,
+              audioUrl: completeMusicUrl,
+              randomNumber: randomNumber,
+            ),
           ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not accurately process audio emotion.')),
         );
       }
     } catch (e) {

@@ -78,7 +78,7 @@ class _FaceInputScreenState extends State<FaceInputScreen> {
 
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('http://192.168.1.8:5000/detect-emotion-face'),
+        Uri.parse('http://192.168.1.6:5000/detect-emotion-face'),
       );
       request.files.add(await http.MultipartFile.fromPath('image', image.path));
 

@@ -13,6 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from music21 import stream, note, midi, chord ,tempo , instrument
 import logging
+from fusion_engine import fuse_emotions, map_fused_to_music_controls
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -420,7 +421,6 @@ label_mapping = {
     "disgust": "Disgust",
     "neutral": "Neutral"
 }
-
 def generate_music(detected_emotion):
     try:
         timestamp = str(time.time())  # Create unique seed
@@ -448,7 +448,6 @@ def generate_music(detected_emotion):
 
         # Assign instruments to their respective tracks
         melody_part.append(instruments[0])
-        # Use second instrument for harmony if available, else fallback to main
         harmony_part.append(instruments[1] if len(instruments) > 1 else instruments[0])
 
         # Set the global tempo
@@ -465,9 +464,8 @@ def generate_music(detected_emotion):
             base_chord_notes = chords[chord_counter % len(chords)].copy()
             bg_chord = chord.Chord(base_chord_notes)
 
-            # Chords last longer (sustained pads/rhythms)
             bg_chord.quarterLength = random.choice([2.0, 4.0])
-            bg_chord.volume.velocity = random.randint(60, 75) # Keep background softer
+            bg_chord.volume.velocity = random.randint(60, 75)
 
             harmony_part.append(bg_chord)
             current_harmony_beats += bg_chord.quarterLength
@@ -475,9 +473,6 @@ def generate_music(detected_emotion):
 
         # --- LAYER 2: GENERATE THE MELODY ON TOP ---
         current_melody_beats = 0
-        if 'last_note_index' in locals(): del last_note_index
-
-        # Emotional rhythmic weighting
         rhythm_choices = [0.5, 1.0, 1.5]
         if detected_emotion in ["Happy", "Surprise", "Angry"]:
             rhythm_choices = [0.25, 0.5, 1.0]
@@ -488,7 +483,6 @@ def generate_music(detected_emotion):
             if 'last_note_index' not in locals():
                 last_note_index = random.randint(0, len(selected_notes) - 1)
 
-            # Step-based walking for natural melody movement
             if random.random() < 0.75:
                 step = random.choice([-2, -1, 1, 2])
                 current_note_index = max(0, min(len(selected_notes) - 1, last_note_index + step))
@@ -500,12 +494,11 @@ def generate_music(detected_emotion):
             duration = random.choice(rhythm_choices)
 
             melody_note = note.Note(pitch, quarterLength=duration)
-            melody_note.volume.velocity = random.randint(85, 110) # Keep melody expressive and loud
+            melody_note.volume.velocity = random.randint(85, 110)
 
             melody_part.append(melody_note)
             current_melody_beats += duration
 
-        # Combine both parallel tracks into the final score
         s.insert(0, melody_part)
         s.insert(0, harmony_part)
 
@@ -534,22 +527,112 @@ def generate_music(detected_emotion):
         logging.error(f"Error generating music: {str(e)}")
         return None
 
+def generate_music_fused(music_config, primary_emotion_label):
+    try:
+        timestamp = str(time.time())  # Create unique seed
+        random.seed(timestamp)
+
+        s = stream.Score()
+        melody_part = stream.Part()
+        harmony_part = stream.Part()
+
+        instruments = instrument_mapping.get(primary_emotion_label, instrument_mapping["Neutral"])
+        selected_notes = note_range.get(primary_emotion_label, note_range["Neutral"])
+
+        modality = music_config['key_modality']
+        if modality == "minor" and primary_emotion_label in chord_progressions:
+            chords = chord_progressions.get(primary_emotion_label)
+        elif modality == "major" and "Happy" in chord_progressions:
+            chords = chord_progressions.get("Happy")
+        else:
+            chords = chord_progressions.get("Neutral")
+
+        melody_part.append(instruments[0])
+        harmony_part.append(instruments[1] if len(instruments) > 1 else instruments[0])
+
+        tempo_value = music_config['tempo_bpm']
+        s.insert(0, tempo.MetronomeMark(number=tempo_value))
+
+        beats_per_second = tempo_value / 60.0
+        total_beats_needed = 30 * beats_per_second
+
+        # --- LAYER 1: GENERATE STEADY HARMONY BACKGROUND ---
+        current_harmony_beats = 0
+        chord_counter = 0
+        while current_harmony_beats < total_beats_needed:
+            base_chord_notes = chords[chord_counter % len(chords)].copy()
+            bg_chord = chord.Chord(base_chord_notes)
+
+            bg_chord.quarterLength = random.choice([2.0, 4.0])
+            bg_chord.volume.velocity = random.randint(60, 75)
+
+            harmony_part.append(bg_chord)
+            current_harmony_beats += bg_chord.quarterLength
+            chord_counter += 1
+
+        # --- LAYER 2: GENERATE THE MELODY ON TOP ---
+        current_melody_beats = 0
+        h_prob = music_config['harmony_prob']
+        if h_prob > 0.5:
+            rhythm_choices = [0.25, 0.5, 1.0]
+        else:
+            rhythm_choices = [1.0, 2.0]
+
+        while current_melody_beats < total_beats_needed:
+            if 'last_note_index' not in locals():
+                last_note_index = random.randint(0, len(selected_notes) - 1)
+
+            if random.random() < 0.75:
+                step = random.choice([-2, -1, 1, 2])
+                current_note_index = max(0, min(len(selected_notes) - 1, last_note_index + step))
+            else:
+                current_note_index = random.randint(0, len(selected_notes) - 1)
+
+            last_note_index = current_note_index
+            pitch = selected_notes[current_note_index]
+            duration = random.choice(rhythm_choices)
+
+            melody_note = note.Note(pitch, quarterLength=duration)
+            melody_note.volume.velocity = random.randint(85, 110)
+
+            melody_part.append(melody_note)
+            current_melody_beats += duration
+
+        s.insert(0, melody_part)
+        s.insert(0, harmony_part)
+
+        random_number = random.randint(1000, 9999)
+        midi_path = f"static/fused_{random_number}.mid"
+        mf = midi.translate.music21ObjectToMidiFile(s)
+        mf.open(midi_path, 'wb')
+        mf.write()
+        mf.close()
+
+        mp3_path = f"static/fused_{random_number}.mp3"
+        subprocess.run([FLUIDSYNTH_PATH, "-ni",
+                        os.path.join(BASE_DIR, "soundfonts/FluidR3_GM.sf2"),
+                        midi_path, "-F", mp3_path, "-r", "44100"])
+
+        if os.path.exists(mp3_path):
+            return mp3_path
+        return None
+
+    except Exception as e:
+        logging.error(f"Error generating fused music: {str(e)}")
+        return None
+
 @app.route('/generate_music', methods=['POST'])
 def handle_generate_music():
     try:
-        # Parse the emotion from the request
         data = request.get_json()
-        print(data)
         detected_emotion = data.get('detected_emotion')
-        play_generated = data.get('play_generated', True)  # Default to True if not provided
 
         if not detected_emotion:
             return jsonify({'error': 'Emotion not provided'}), 400
 
-
         music_path = generate_music(detected_emotion)
 
-        if music_path and os.path.exists(music_path):  # Check if the music was generated successfully
+        if music_path and os.path.exists(music_path):
             music_url = f"{request.host_url}static/{os.path.basename(music_path)}"
             return jsonify({'music_url': music_url}), 200
         else:
@@ -558,10 +641,88 @@ def handle_generate_music():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
 @app.route('/static/<path:filename>')
 def serve_static(filename):
     return send_from_directory('static', filename, mimetype="audio/mpeg")
 
+@app.route('/detect-emotion-multimodal', methods=['POST'])
+def detect_emotion_multimodal():
+    try:
+        text_dist = {'Happy': 0.0, 'Sad': 0.0, 'Neutral': 1.0, 'Angry': 0.0}
+        audio_dist = {'Happy': 0.0, 'Sad': 0.0, 'Neutral': 1.0, 'Angry': 0.0}
+        face_dist = {'Happy': 0.0, 'Sad': 0.0, 'Neutral': 1.0, 'Angry': 0.0}
+
+        quality_scores = {'text': 0.0, 'audio': 0.0, 'face': 0.0}
+        raw_debug = {}
+
+        text_data = request.form.get('text', '')
+        if text_data and text_emotion_model:
+            detected_txt = detect_emotion_with_gemini(text_data)
+            if not detected_txt:
+                pred = text_emotion_model(text_data)
+                detected_txt = pred[0]['label']
+
+            std_txt = label_mapping.get(detected_txt.lower(), detected_txt.capitalize())
+            text_dist = {l: 1.0 if l == std_txt else 0.0 for l in ['Happy', 'Sad', 'Neutral', 'Angry']}
+            quality_scores['text'] = 1.0
+            raw_debug['text'] = text_dist
+
+        if 'audio' in request.files:
+            audio_file = request.files['audio']
+            y, sr = librosa.load(audio_file, sr=None)
+            if len(y) > 0:
+                mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40).T
+                with torch.no_grad():
+                    raw_audio_out = audio_emotion_model(torch.tensor(mfccs, dtype=torch.float32).unsqueeze(0).permute(0, 2, 1))
+                    audio_res = get_standardized_result("audio", raw_audio_out, emotion_labels)
+                    audio_dist = audio_res['label_distribution']
+                quality_scores['audio'] = 1.0
+                raw_debug['audio'] = audio_dist
+
+        if 'image' in request.files:
+            image_file = request.files['image']
+            img = cv2.imdecode(np.frombuffer(image_file.read(), np.uint8), cv2.IMREAD_COLOR)
+            if img is not None:
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+                if len(faces) > 0:
+                    x, y, w, h = faces[0]
+                    face = cv2.resize(gray[y:y+h, x:x+w], (48, 48)).astype('float32') / 255.0
+                    face = (face - 0.5) / 0.5
+                    face_tensor = torch.from_numpy(face.reshape(1, 1, 48, 48)).float().to(device)
+                    with torch.no_grad():
+                        raw_face_out = face_emotion_model(face_tensor)
+                        face_res = get_standardized_result("face", raw_face_out, face_emotion_labels)
+                        face_dist = face_res['label_distribution']
+                    quality_scores['face'] = 1.0
+                    raw_debug['face'] = face_dist
+
+        fused_profile = fuse_emotions(text_dist, audio_dist, face_dist, quality_scores)
+        music_config = map_fused_to_music_controls(fused_profile)
+        primary_emotion = max(fused_profile, key=fused_profile.get)
+
+        music_path = generate_music_fused(music_config, primary_emotion)
+
+        response_payload = {
+            'success': True,
+            'dominant_emotion': primary_emotion,
+            'fused_vector': fused_profile,
+            'music_parameters': music_config,
+            'debug_payload': {
+                'quality_scores': quality_scores,
+                'raw_distributions': raw_debug
+            }
+        }
+
+        if music_path and os.path.exists(music_path):
+            response_payload['music_url'] = f"{request.host_url}static/{os.path.basename(music_path)}"
+            return jsonify(response_payload), 200
+        else:
+            return jsonify({'success': False, 'error': 'Music compilation failed'}), 500
+
+    except Exception as e:
+        logging.exception("Critical Failure inside Multimodal Route Engine")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000 ,threaded=True)
+    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000, threaded=True)
