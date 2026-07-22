@@ -158,9 +158,9 @@ https://github.com/user-attachments/assets/ceb6a8cb-315c-4668-a3c7-f6a8139d0253
 **Technical Note on Demo: > "This demo was captured during a live test on a mid-range mobile device to demonstrate the model's efficiency on Edge Devices without cloud-side GPU acceleration. The focus is on real-time emotional mapping logic  rather than high-fidelity recording."
 
 
-I am now exploring how to scale this architecture by migrating the custom LSTM layers to Vertex AI or leveraging Gemini’s multimodal embeddings for more complex orchestration.
+#### I am now exploring how to scale this architecture by migrating the custom LSTM layers to Vertex AI or leveraging Gemini’s multimodal embeddings for more complex orchestration.
 
-I’d love to connect with anyone working on ‘emotional latency’ in real-time generative apps or those who have moved custom LSTM pipelines to Google’s managed services.
+#### I’d love to connect with anyone working on ‘emotional latency’ in real-time generative apps or those who have moved custom LSTM pipelines to Google’s managed services.
 
 
 
