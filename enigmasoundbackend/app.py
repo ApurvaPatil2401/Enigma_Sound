@@ -13,7 +13,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from music21 import stream, note, midi, chord ,tempo , instrument
 import logging
-from fusion_engine import fuse_emotions, map_fused_to_music_controls
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -84,7 +83,7 @@ class EmotionCNN(nn.Module):
 try:
     face_emotion_model = EmotionCNN().to(device)
     state_dict = torch.load(os.path.join(BASE_DIR, 'emotion_model', 'best_emotion_model.pth'), map_location=device)
-    face_emotion_labels = ['Angry', 'Disgust', 'Fear', 'Sad', 'Happy', 'Surprise', 'Neutral']
+    emotion_labels = ['Angry', 'Disgust', 'Fear', 'Sad', 'Happy', 'Surprise', 'Neutral']
     face_emotion_model.load_state_dict(state_dict)
     face_emotion_model.eval()
 except Exception as e:
@@ -136,46 +135,6 @@ audio_emotion_model = AudioEmotionModel(num_classes)
 audio_emotion_model.load_state_dict(torch.load(MODEL_PATH, map_location=torch.device('cpu')))
 audio_emotion_model.eval()  # Set model to evaluation mode
 
-import torch.nn.functional as F
-
-def get_standardized_result(modality_name, raw_output_tensor, emotion_labels):
-    """
-    Wraps the raw model output into the standardized JSON contract.
-    """
-    # 1. Ensure the tensor is on CPU and convert to probabilities
-    # Using softmax ensures all outputs sum to 1.0
-    probabilities = F.softmax(raw_output_tensor, dim=1).detach().cpu().squeeze().tolist()
-
-    # If the model outputs a single value (e.g., shape is empty after squeeze), wrap it in a list
-    if not isinstance(probabilities, list):
-        probabilities = [probabilities]
-
-    # 2. Safety check: ensure number of labels matches model output
-    if len(probabilities) != len(emotion_labels):
-        raise ValueError(f"Mismatch: Model output {len(probabilities)} values, but provided {len(emotion_labels)} labels.")
-
-    # 3. Map probabilities to labels
-    label_distribution = {emotion_labels[i]: probabilities[i] for i in range(len(emotion_labels))}
-
-    # 4. Normalize to Project Standard Vocabulary
-    normalized_distribution = {}
-    for label, prob in label_distribution.items():
-        # Ensure label_mapping is accessible here (define it globally or pass it in)
-        standard_label = label_mapping.get(label.lower(), label.capitalize())
-        normalized_distribution[standard_label] = normalized_distribution.get(standard_label, 0) + prob
-
-    top_label = max(normalized_distribution, key=normalized_distribution.get)
-    confidence = normalized_distribution[top_label]
-
-    return {
-        "modality": modality_name,
-        "status": "ok",
-        "top_label": top_label,
-        "label_distribution": normalized_distribution,
-        "confidence": float(confidence), # Ensure it is a standard float for JSON
-        "input_quality": {"score": 1.0, "flags": []}
-    }
-
 def analyze_audio_emotion(mfccs):
     """Predict emotion from MFCC features using the loaded PyTorch model."""
     try:
@@ -199,50 +158,34 @@ def analyze_audio_emotion(mfccs):
 @app.route('/detect-emotion-text', methods=['POST'])
 def detect_emotion_text():
     if text_emotion_model is None:
+        logging.error("Text emotion model is not initialized!")
         return jsonify({'error': 'Text emotion model not initialized'}), 500
 
     try:
         data = request.get_json()
         text = data.get('text', '')
+
         if not text:
             return jsonify({'error': 'No text provided'}), 400
 
-        # 1. Get raw emotion data
+        # Try Gemini first, fallback to existing model
         detected_emotion = detect_emotion_with_gemini(text)
 
-        # 2. Fallback to local model
         if not detected_emotion:
+            # Fallback to existing DistilBERT model
             prediction = text_emotion_model(text)
             detected_emotion = prediction[0]['label']
 
-        # 3. Create the standardized result structure
-        # Since text models often return just a label, we provide the structure
-        # required for your frontend to parse correctly.
-        result = {
-            "modality": "text",
-            "status": "ok",
-            "top_label": detected_emotion,
-            "label_distribution": {detected_emotion: 1.0}, # Placeholder
-            "confidence": 1.0,
-            "input_quality": {"score": 1.0, "flags": []}
-        }
-
-        final_response = {
-            "emotion": detected_emotion,
-            "debug_info": result
-        }
-
-        # 4. Handle Music Generation
         play_generated = data.get('play_generated', True)
         if play_generated:
             music_path = generate_music(detected_emotion)
             if music_path and os.path.exists(music_path):
-                final_response["music_url"] = f"{request.host_url}static/{os.path.basename(music_path)}"
-                return jsonify(final_response), 200
+                music_url = f"{request.host_url}static/{os.path.basename(music_path)}"
+                return jsonify({'emotion': detected_emotion, 'music_url': music_url}), 200
             else:
                 return jsonify({'error': 'Music file not found'}), 404
 
-        return jsonify(final_response), 200
+        return jsonify({'emotion': detected_emotion}), 200
 
     except Exception as e:
         logging.error(f"Error in emotion detection: {e}")
@@ -263,35 +206,17 @@ def detect_emotion_audio():
             return jsonify({'error': 'Audio file is empty or corrupted'}), 400
 
         mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40).T
-
-        with torch.no_grad():
-            raw_output = audio_emotion_model(torch.tensor(mfccs, dtype=torch.float32).unsqueeze(0).permute(0, 2, 1))
-            result = get_standardized_result("audio", raw_output, emotion_labels)
-            detected_emotion = result['top_label']
-
-        result = get_standardized_result("audio", raw_output, emotion_labels)
-        detected_emotion = result['top_label']
-
-        final_response = {
-            "emotion": detected_emotion,
-            "debug_info": result
-        }
+        detected_emotion = analyze_audio_emotion(mfccs)
 
         if play_generated:
             music_path = generate_music(detected_emotion)
             if music_path and os.path.exists(music_path):
                 music_url = f"{request.host_url}static/{os.path.basename(music_path)}"
-                # Add the music_url to your response
-                final_response["music_url"] = music_url
-                return jsonify(final_response), 200
+                return jsonify({'emotion': detected_emotion, 'music_url': music_url}), 200
             else:
-                return jsonify({'error': 'Music file generation failed'}), 404
-
-        # Final return for play_generated=False
-        return jsonify(final_response), 200
+                return jsonify({'error': 'Music file not found'}), 404
 
     except Exception as e:
-        logging.error(f"Error in detect_emotion_audio: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/detect-emotion-face', methods=['POST'])
@@ -300,6 +225,7 @@ def detect_emotion_face():
         if 'image' not in request.files:
             return jsonify({'error': 'No image file provided'}), 400
 
+        # Get play_generated flag from form-data (Convert to Boolean)
         play_generated = request.form.get('play_generated', 'true').lower() == 'true'
 
         image_file = request.files['image']
@@ -308,54 +234,44 @@ def detect_emotion_face():
         if img is None:
             return jsonify({'error': 'Invalid image file'}), 400
 
-        # Face detection
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
         if len(faces) == 0:
             return jsonify({'error': 'No face detected'}), 400
 
-        # Process face: resize and normalize
+        # Process the first detected face (assuming one face)
         x, y, w, h = faces[0]
-        face = cv2.resize(gray[y:y+h, x:x+w], (48, 48))
-        face = face.astype('float32') / 255.0
-        face = (face - 0.5) / 0.5
+        face = img[y:y+h, x:x+w]
+        face = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)  # Convert face to grayscale
+        face = cv2.resize(face, (48, 48))  # Resize to match model input size
+        face = face.astype('float32') / 255  # Normalize pixel values
+        face = (face - 0.5) / 0.5  # Match normalization during training
 
-        # Prepare tensor (Batch, Channel, Height, Width)
-        face_tensor = torch.from_numpy(face.reshape(1, 1, 48, 48)).float().to(device)
+        face = np.expand_dims(face, axis=0)  # Add batch dimension
+        face = np.expand_dims(face, axis=0)  # Add channel dimension (grayscale)
+
+        face_tensor = torch.from_numpy(face).float().to(device)
 
         with torch.no_grad():
             output = face_emotion_model(face_tensor)
+            _, predicted = torch.max(output, 1)
+            detected_emotion = emotion_labels[predicted.item()]
 
-            # --- SAFETY CHECK: Prevent IndexErrors ---
-            num_outputs = output.shape[1]
-            if num_outputs != len(face_emotion_labels):
-                logging.error(f"Mismatch! Model outputs {num_outputs} values, but you have {len(emotion_labels)} labels.")
-                return jsonify({'error': f'Model-Label mismatch: {num_outputs} vs {len(emotion_labels)}'}), 500
-
-            # Use your standardized contract wrapper
-            result = get_standardized_result("face", output, face_emotion_labels)
-            detected_emotion = result['top_label']
-
-        # Build standardized response
-        final_response = {
-            "emotion": detected_emotion,
-            "debug_info": result
-        }
-
-        # Music generation logic
+        # Generate music based on detected emotion
         if play_generated:
             music_path = generate_music(detected_emotion)
-            if music_path and os.path.exists(music_path):
-                final_response["music_url"] = f"{request.host_url}static/{os.path.basename(music_path)}"
-                return jsonify(final_response), 200
+            if music_path and os.path.exists(music_path):  # Ensure the music file was generated successfully
+                music_url = f"{request.host_url}static/{os.path.basename(music_path)}"
+                return jsonify({'emotion': detected_emotion, 'music_url': music_url}), 200
             else:
+                logging.error("Generated music file not found!")
                 return jsonify({'error': 'Music file not found'}), 404
-
-        return jsonify(final_response), 200
+        else:
+            return jsonify({'emotion': detected_emotion}), 200
 
     except Exception as e:
-        logging.exception("Detailed error in detect_emotion_face")
+        logging.error(f"Error in detect_emotion_face: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # Define instruments for each emotion
@@ -421,6 +337,7 @@ label_mapping = {
     "disgust": "Disgust",
     "neutral": "Neutral"
 }
+
 def generate_music(detected_emotion):
     try:
         timestamp = str(time.time())  # Create unique seed
@@ -448,6 +365,7 @@ def generate_music(detected_emotion):
 
         # Assign instruments to their respective tracks
         melody_part.append(instruments[0])
+        # Use second instrument for harmony if available, else fallback to main
         harmony_part.append(instruments[1] if len(instruments) > 1 else instruments[0])
 
         # Set the global tempo
@@ -464,8 +382,9 @@ def generate_music(detected_emotion):
             base_chord_notes = chords[chord_counter % len(chords)].copy()
             bg_chord = chord.Chord(base_chord_notes)
 
+            # Chords last longer (sustained pads/rhythms)
             bg_chord.quarterLength = random.choice([2.0, 4.0])
-            bg_chord.volume.velocity = random.randint(60, 75)
+            bg_chord.volume.velocity = random.randint(60, 75) # Keep background softer
 
             harmony_part.append(bg_chord)
             current_harmony_beats += bg_chord.quarterLength
@@ -473,6 +392,9 @@ def generate_music(detected_emotion):
 
         # --- LAYER 2: GENERATE THE MELODY ON TOP ---
         current_melody_beats = 0
+        if 'last_note_index' in locals(): del last_note_index
+
+        # Emotional rhythmic weighting
         rhythm_choices = [0.5, 1.0, 1.5]
         if detected_emotion in ["Happy", "Surprise", "Angry"]:
             rhythm_choices = [0.25, 0.5, 1.0]
@@ -483,6 +405,7 @@ def generate_music(detected_emotion):
             if 'last_note_index' not in locals():
                 last_note_index = random.randint(0, len(selected_notes) - 1)
 
+            # Step-based walking for natural melody movement
             if random.random() < 0.75:
                 step = random.choice([-2, -1, 1, 2])
                 current_note_index = max(0, min(len(selected_notes) - 1, last_note_index + step))
@@ -494,11 +417,12 @@ def generate_music(detected_emotion):
             duration = random.choice(rhythm_choices)
 
             melody_note = note.Note(pitch, quarterLength=duration)
-            melody_note.volume.velocity = random.randint(85, 110)
+            melody_note.volume.velocity = random.randint(85, 110) # Keep melody expressive and loud
 
             melody_part.append(melody_note)
             current_melody_beats += duration
 
+        # Combine both parallel tracks into the final score
         s.insert(0, melody_part)
         s.insert(0, harmony_part)
 
@@ -527,112 +451,22 @@ def generate_music(detected_emotion):
         logging.error(f"Error generating music: {str(e)}")
         return None
 
-def generate_music_fused(music_config, primary_emotion_label):
-    try:
-        timestamp = str(time.time())  # Create unique seed
-        random.seed(timestamp)
-
-        s = stream.Score()
-        melody_part = stream.Part()
-        harmony_part = stream.Part()
-
-        instruments = instrument_mapping.get(primary_emotion_label, instrument_mapping["Neutral"])
-        selected_notes = note_range.get(primary_emotion_label, note_range["Neutral"])
-
-        modality = music_config['key_modality']
-        if modality == "minor" and primary_emotion_label in chord_progressions:
-            chords = chord_progressions.get(primary_emotion_label)
-        elif modality == "major" and "Happy" in chord_progressions:
-            chords = chord_progressions.get("Happy")
-        else:
-            chords = chord_progressions.get("Neutral")
-
-        melody_part.append(instruments[0])
-        harmony_part.append(instruments[1] if len(instruments) > 1 else instruments[0])
-
-        tempo_value = music_config['tempo_bpm']
-        s.insert(0, tempo.MetronomeMark(number=tempo_value))
-
-        beats_per_second = tempo_value / 60.0
-        total_beats_needed = 30 * beats_per_second
-
-        # --- LAYER 1: GENERATE STEADY HARMONY BACKGROUND ---
-        current_harmony_beats = 0
-        chord_counter = 0
-        while current_harmony_beats < total_beats_needed:
-            base_chord_notes = chords[chord_counter % len(chords)].copy()
-            bg_chord = chord.Chord(base_chord_notes)
-
-            bg_chord.quarterLength = random.choice([2.0, 4.0])
-            bg_chord.volume.velocity = random.randint(60, 75)
-
-            harmony_part.append(bg_chord)
-            current_harmony_beats += bg_chord.quarterLength
-            chord_counter += 1
-
-        # --- LAYER 2: GENERATE THE MELODY ON TOP ---
-        current_melody_beats = 0
-        h_prob = music_config['harmony_prob']
-        if h_prob > 0.5:
-            rhythm_choices = [0.25, 0.5, 1.0]
-        else:
-            rhythm_choices = [1.0, 2.0]
-
-        while current_melody_beats < total_beats_needed:
-            if 'last_note_index' not in locals():
-                last_note_index = random.randint(0, len(selected_notes) - 1)
-
-            if random.random() < 0.75:
-                step = random.choice([-2, -1, 1, 2])
-                current_note_index = max(0, min(len(selected_notes) - 1, last_note_index + step))
-            else:
-                current_note_index = random.randint(0, len(selected_notes) - 1)
-
-            last_note_index = current_note_index
-            pitch = selected_notes[current_note_index]
-            duration = random.choice(rhythm_choices)
-
-            melody_note = note.Note(pitch, quarterLength=duration)
-            melody_note.volume.velocity = random.randint(85, 110)
-
-            melody_part.append(melody_note)
-            current_melody_beats += duration
-
-        s.insert(0, melody_part)
-        s.insert(0, harmony_part)
-
-        random_number = random.randint(1000, 9999)
-        midi_path = f"static/fused_{random_number}.mid"
-        mf = midi.translate.music21ObjectToMidiFile(s)
-        mf.open(midi_path, 'wb')
-        mf.write()
-        mf.close()
-
-        mp3_path = f"static/fused_{random_number}.mp3"
-        subprocess.run([FLUIDSYNTH_PATH, "-ni",
-                        os.path.join(BASE_DIR, "soundfonts/FluidR3_GM.sf2"),
-                        midi_path, "-F", mp3_path, "-r", "44100"])
-
-        if os.path.exists(mp3_path):
-            return mp3_path
-        return None
-
-    except Exception as e:
-        logging.error(f"Error generating fused music: {str(e)}")
-        return None
-
 @app.route('/generate_music', methods=['POST'])
 def handle_generate_music():
     try:
+        # Parse the emotion from the request
         data = request.get_json()
+        print(data)
         detected_emotion = data.get('detected_emotion')
+        play_generated = data.get('play_generated', True)  # Default to True if not provided
 
         if not detected_emotion:
             return jsonify({'error': 'Emotion not provided'}), 400
 
+
         music_path = generate_music(detected_emotion)
 
-        if music_path and os.path.exists(music_path):
+        if music_path and os.path.exists(music_path):  # Check if the music was generated successfully
             music_url = f"{request.host_url}static/{os.path.basename(music_path)}"
             return jsonify({'music_url': music_url}), 200
         else:
@@ -641,88 +475,10 @@ def handle_generate_music():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
 @app.route('/static/<path:filename>')
 def serve_static(filename):
     return send_from_directory('static', filename, mimetype="audio/mpeg")
 
-@app.route('/detect-emotion-multimodal', methods=['POST'])
-def detect_emotion_multimodal():
-    try:
-        text_dist = {'Happy': 0.0, 'Sad': 0.0, 'Neutral': 1.0, 'Angry': 0.0}
-        audio_dist = {'Happy': 0.0, 'Sad': 0.0, 'Neutral': 1.0, 'Angry': 0.0}
-        face_dist = {'Happy': 0.0, 'Sad': 0.0, 'Neutral': 1.0, 'Angry': 0.0}
-
-        quality_scores = {'text': 0.0, 'audio': 0.0, 'face': 0.0}
-        raw_debug = {}
-
-        text_data = request.form.get('text', '')
-        if text_data and text_emotion_model:
-            detected_txt = detect_emotion_with_gemini(text_data)
-            if not detected_txt:
-                pred = text_emotion_model(text_data)
-                detected_txt = pred[0]['label']
-
-            std_txt = label_mapping.get(detected_txt.lower(), detected_txt.capitalize())
-            text_dist = {l: 1.0 if l == std_txt else 0.0 for l in ['Happy', 'Sad', 'Neutral', 'Angry']}
-            quality_scores['text'] = 1.0
-            raw_debug['text'] = text_dist
-
-        if 'audio' in request.files:
-            audio_file = request.files['audio']
-            y, sr = librosa.load(audio_file, sr=None)
-            if len(y) > 0:
-                mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40).T
-                with torch.no_grad():
-                    raw_audio_out = audio_emotion_model(torch.tensor(mfccs, dtype=torch.float32).unsqueeze(0).permute(0, 2, 1))
-                    audio_res = get_standardized_result("audio", raw_audio_out, emotion_labels)
-                    audio_dist = audio_res['label_distribution']
-                quality_scores['audio'] = 1.0
-                raw_debug['audio'] = audio_dist
-
-        if 'image' in request.files:
-            image_file = request.files['image']
-            img = cv2.imdecode(np.frombuffer(image_file.read(), np.uint8), cv2.IMREAD_COLOR)
-            if img is not None:
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-                if len(faces) > 0:
-                    x, y, w, h = faces[0]
-                    face = cv2.resize(gray[y:y+h, x:x+w], (48, 48)).astype('float32') / 255.0
-                    face = (face - 0.5) / 0.5
-                    face_tensor = torch.from_numpy(face.reshape(1, 1, 48, 48)).float().to(device)
-                    with torch.no_grad():
-                        raw_face_out = face_emotion_model(face_tensor)
-                        face_res = get_standardized_result("face", raw_face_out, face_emotion_labels)
-                        face_dist = face_res['label_distribution']
-                    quality_scores['face'] = 1.0
-                    raw_debug['face'] = face_dist
-
-        fused_profile = fuse_emotions(text_dist, audio_dist, face_dist, quality_scores)
-        music_config = map_fused_to_music_controls(fused_profile)
-        primary_emotion = max(fused_profile, key=fused_profile.get)
-
-        music_path = generate_music_fused(music_config, primary_emotion)
-
-        response_payload = {
-            'success': True,
-            'dominant_emotion': primary_emotion,
-            'fused_vector': fused_profile,
-            'music_parameters': music_config,
-            'debug_payload': {
-                'quality_scores': quality_scores,
-                'raw_distributions': raw_debug
-            }
-        }
-
-        if music_path and os.path.exists(music_path):
-            response_payload['music_url'] = f"{request.host_url}static/{os.path.basename(music_path)}"
-            return jsonify(response_payload), 200
-        else:
-            return jsonify({'success': False, 'error': 'Music compilation failed'}), 500
-
-    except Exception as e:
-        logging.exception("Critical Failure inside Multimodal Route Engine")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
 if __name__ == '__main__':
-    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000, threaded=True)
+    app.run(debug=True, host='0.0.0.0', port=5000 ,threaded=True)
