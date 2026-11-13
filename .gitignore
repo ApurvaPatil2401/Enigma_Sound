@@ -44,3 +44,4 @@ music/
 static/
 .env
 
+venv/

@@ -24,7 +24,7 @@ CORS(app)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Download FluidSynth from: [Google Drive link mention in readme]
 # Update this path to match your local installation
-FLUIDSYNTH_PATH = "D:/Aaa/fluidsynth-2.4.3/bin/fluidsynth"
+FLUIDSYNTH_PATH = "fluidsynth"
 
 # Initialize logging
 logging.basicConfig(level=logging.DEBUG)
@@ -35,18 +35,21 @@ emotion_labels = ['Angry', 'Disgust', 'Fear', 'Happy','Neutral','Sad', 'Surprise
 # Load models safely
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Load the Hugging Face text emotion model
-try:
-    text_emotion_model = pipeline(
-        "text-classification",
-        model="bhadresh-savani/distilbert-base-uncased-emotion",
-        framework="pt",  # Force PyTorch instead of TensorFlow
-        device=0 if torch.cuda.is_available() else -1
-    )
-    print("Model loaded successfully!")
-except Exception as e:
-    logging.error(f"Error loading text emotion model: {e}")
-    text_emotion_model = None
+# Local DistilBERT is optional: Gemini is the primary text detector.
+# Set USE_LOCAL_TEXT_MODEL=false to save ~500 MB RAM on small hosts.
+USE_LOCAL_TEXT_MODEL = os.environ.get("USE_LOCAL_TEXT_MODEL", "true").lower() == "true"
+text_emotion_model = None
+if USE_LOCAL_TEXT_MODEL:
+    try:
+        text_emotion_model = pipeline(
+            "text-classification",
+            model="bhadresh-savani/distilbert-base-uncased-emotion",
+            framework="pt",  # Force PyTorch instead of TensorFlow
+            device=0 if torch.cuda.is_available() else -1
+        )
+        print("Model loaded successfully!")
+    except Exception as e:
+        logging.error(f"Error loading text emotion model: {e}")
 
 # Load the facial emotion model
 class EmotionCNN(nn.Module):
@@ -157,10 +160,6 @@ def analyze_audio_emotion(mfccs):
 
 @app.route('/detect-emotion-text', methods=['POST'])
 def detect_emotion_text():
-    if text_emotion_model is None:
-        logging.error("Text emotion model is not initialized!")
-        return jsonify({'error': 'Text emotion model not initialized'}), 500
-
     try:
         data = request.get_json()
         text = data.get('text', '')
@@ -168,13 +167,15 @@ def detect_emotion_text():
         if not text:
             return jsonify({'error': 'No text provided'}), 400
 
-        # Try Gemini first, fallback to existing model
+        # Gemini first, local DistilBERT only if it is loaded
         detected_emotion = detect_emotion_with_gemini(text)
 
-        if not detected_emotion:
-            # Fallback to existing DistilBERT model
+        if not detected_emotion and text_emotion_model is not None:
             prediction = text_emotion_model(text)
             detected_emotion = prediction[0]['label']
+
+        if not detected_emotion:
+            return jsonify({'error': 'Text emotion detection unavailable'}), 503
 
         play_generated = data.get('play_generated', True)
         if play_generated:
@@ -190,7 +191,7 @@ def detect_emotion_text():
     except Exception as e:
         logging.error(f"Error in emotion detection: {e}")
         return jsonify({'error': str(e)}), 500
-
+        
 @app.route('/detect-emotion-audio', methods=['POST'])
 def detect_emotion_audio():
     try:

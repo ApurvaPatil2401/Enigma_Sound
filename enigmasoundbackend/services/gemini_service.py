@@ -1,38 +1,28 @@
 import os
-from google import genai
+import logging
 from dotenv import load_dotenv
+from google import genai
+
 load_dotenv()
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", None)
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
+ALLOWED = ["Happy", "Sad", "Angry", "Fear", "Surprise", "Disgust", "Neutral", "Love"]
 
-def detect_emotion_with_gemini(text: str) -> str:
-    """
-    Detect emotion from text using Google Gemini.
-    Falls back to None if API key is missing.
-    """
+
+def detect_emotion_with_gemini(text: str):
+    """Return one emotion label, or None so the caller falls back to DistilBERT."""
     if not GEMINI_API_KEY:
         return None
-
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-
-        prompt = f"""
-        Analyze the emotion in this text and respond with ONLY one word 
-        from: Happy, Sad, Angry, Fear, Surprise, Disgust, Neutral, Love
-        
-        Text: "{text}"
-        
-        Emotion:
-        """
-
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
+        prompt = (
+            "Classify the emotion in this text. Reply with exactly one word "
+            f"from: {', '.join(ALLOWED)}.\n\nText: \"{text}\"\n\nEmotion:"
         )
-
-        emotion = response.text.strip()
-        return emotion
-
+        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+        label = response.text.strip().strip(".").capitalize()
+        return label if label in ALLOWED else None
     except Exception as e:
-        print(f"Gemini API error: {e}")
+        logging.warning("Gemini failed, using fallback: %s", e)
         return None
